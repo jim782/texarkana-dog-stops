@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Texarkana Dog Stops</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    h1 { font-size: 20px; margin: 0 0 10px; }
+    .sub { color: #555; font-size: 13px; margin-bottom: 14px; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .box { border: 1px solid #ddd; border-radius: 12px; padding: 10px; }
+    label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+    select, input[type="checkbox"] { transform: scale(1.05); }
+    .list { display: grid; gap: 10px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 12px; }
+    .title { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+    .meta { color: #444; font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .pill { border: 1px solid #ccc; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button, a.btn {
+      border: 1px solid #222; background: #fff; border-radius: 10px;
+      padding: 10px 12px; font-size: 14px; text-decoration: none; color: #111;
+    }
+    button:hover, a.btn:hover { background: #f6f6f6; cursor: pointer; }
+    .small { color: #666; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Texarkana Dog Stops</h1>
+  <div class="sub">Mini field-test app. Tap a stop → Navigate. (Edit data inside index.html)</div>
+
+  <div class="controls">
+    <div class="box">
+      <div style="font-weight:700; margin-bottom:6px;">Filters</div>
+      <label><input id="fPublic" type="checkbox" checked> Public only</label>
+      <label><input id="fFenced" type="checkbox"> Fenced only</label>
+      <label><input id="fWater" type="checkbox"> Water only</label>
+      <label><input id="fFood" type="checkbox"> Food nearby</label>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:700; margin-bottom:6px;">Sort</div>
+      <select id="sort">
+        <option value="minutes_from_i30">Closest to I-30</option>
+        <option value="name">Name</option>
+        <option value="last_verified">Last Verified</option>
+      </select>
+      <div class="small">Tip: “Closest to I-30” mimics the traveler use case.</div>
+    </div>
+  </div>
+
+  <div id="list" class="list"></div>
+
+<script>
+  // ✅ EDIT THESE 3 STOPS
+  const stops = [
+  {
+    name: "Spring Lake Park Dog Park",
+    lat: 33.467088,
+    lon: -94.058168,
+    public: "Y",
+    fenced: "Y",
+    water: "Y",
+    minutes_from_i30: 2,
+    food_nearby: "Y",
+    notes: "Easy access from I-30, good parking.",
+    last_verified: "2026-02-21"
+  },
+  {
+    name: "Loves Travel US TXK",
+    lat: 33.4632734,
+    lon: -94.2043902,
+    public: "Y",
+    fenced: "Y",
+    water: "N",
+    minutes_from_i30: 2,
+    food_nearby: "Y",
+    notes: "Quick off Interstate.",
+    last_verified: "2026-02-21"
+  },
+  {
+    name: "Love's Travel Stop US 59",
+    lat: 33.2623001,
+    lon: -94.1522902,
+    public: "Y",
+    fenced: "Y",
+    water: "Unknown",
+    minutes_from_i30: 8,
+    food_nearby: "Y",
+    notes: "South off US 59",
+    last_verified: "2026-02-21"
+  }
+];
+
+  const el = (id) => document.getElementById(id);
+
+  function appleMapsUrl(lat, lon, name) {
+    // Apple Maps directions
+    const q = encodeURIComponent(name || "Dog Stop");
+    return `https://maps.apple.com/?daddr=${lat},${lon}&q=${q}`;
+  }
+
+  function googleMapsUrl(lat, lon, name) {
+    // Google Maps directions
+    const q = encodeURIComponent(name || "Dog Stop");
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&destination_place_id=&travelmode=driving&query=${q}`;
+  }
+
+  function passFilters(s) {
+    if (el("fPublic").checked && (s.public || "").toUpperCase() !== "Y") return false;
+    if (el("fFenced").checked && (s.fenced || "").toUpperCase() !== "Y") return false;
+    if (el("fWater").checked && (s.water || "").toUpperCase() !== "Y") return false;
+    if (el("fFood").checked && (s.food_nearby || "").toUpperCase() !== "Y") return false;
+    return true;
+  }
+
+  function sortStops(arr) {
+    const key = el("sort").value;
+    return [...arr].sort((a,b) => {
+      if (key === "name") return (a.name||"").localeCompare(b.name||"");
+      if (key === "last_verified") return (b.last_verified||"").localeCompare(a.last_verified||"");
+      // minutes_from_i30 numeric
+      return (a.minutes_from_i30 ?? 999) - (b.minutes_from_i30 ?? 999);
+    });
+  }
+
+  function render() {
+    const filtered = sortStops(stops.filter(passFilters));
+    const container = el("list");
+    container.innerHTML = "";
+
+    if (!filtered.length) {
+      container.innerHTML = `<div class="card">No matches. Try relaxing filters.</div>`;
+      return;
+    }
+
+    for (const s of filtered) {
+      const meta = [
+        `I-30: ${s.minutes_from_i30 ?? "?"} min`,
+        `Public: ${s.public ?? "?"}`,
+        `Fenced: ${s.fenced ?? "?"}`,
+        `Water: ${s.water ?? "?"}`,
+        `Food: ${s.food_nearby ?? "?"}`
+      ];
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="title">${s.name || "(Unnamed Stop)"}</div>
+        <div class="meta">${meta.map(m => `<span class="pill">${m}</span>`).join("")}</div>
+        <div>${s.notes ? s.notes : ""}</div>
+        <div class="actions" style="margin-top:10px;">
+          <a class="btn" href="${appleMapsUrl(s.lat, s.lon, s.name)}" target="_blank" rel="noopener">Navigate (Apple Maps)</a>
+          <a class="btn" href="${googleMapsUrl(s.lat, s.lon, s.name)}" target="_blank" rel="noopener">Navigate (Google)</a>
+        </div>
+        <div class="small">Last verified: ${s.last_verified || "—"}</div>
+      `;
+      container.appendChild(card);
+    }
+  }
+
+  ["fPublic","fFenced","fWater","fFood","sort"].forEach(id => {
+    el(id).addEventListener("change", render);
+  });
+
+  render();
+</script>
+</body>
+</html>

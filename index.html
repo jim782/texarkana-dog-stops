@@ -6,10 +6,28 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Texarkana Dog Stops</title>
+
+  <!-- Leaflet (Map) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
   <style>
     body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
     h1 { font-size: 20px; margin: 0 0 10px; }
-    .sub { color: #555; font-size: 13px; margin-bottom: 14px; }
+    .sub { color: #555; font-size: 13px; margin-bottom: 14px; line-height: 1.35; }
+
+    .mapwrap { margin-bottom: 14px; }
+    #map { height: 320px; border: 1px solid #ddd; border-radius: 14px; overflow: hidden; }
+
     .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
     .box { border: 1px solid #ddd; border-radius: 12px; padding: 10px; }
     label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
@@ -20,17 +38,31 @@
     .meta { color: #444; font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
     .pill { border: 1px solid #ccc; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    button, a.btn {
+    a.btn {
       border: 1px solid #222; background: #fff; border-radius: 10px;
       padding: 10px 12px; font-size: 14px; text-decoration: none; color: #111;
+      display: inline-block;
     }
-    button:hover, a.btn:hover { background: #f6f6f6; cursor: pointer; }
+    a.btn:hover { background: #f6f6f6; }
     .small { color: #666; font-size: 12px; margin-top: 8px; }
+
+    .hint { color:#666; font-size:12px; margin-top:8px; line-height:1.35; }
   </style>
 </head>
+
 <body>
   <h1>Texarkana Dog Stops</h1>
-  <div class="sub">Mini field-test app. Tap a stop → Navigate. (Edit data inside index.html)</div>
+  <div class="sub">
+    Mini field-test app. Filter stops, tap a stop on the map, or hit Navigate.
+    <br/>Goal: “fast, safe waypoint during travel.”
+  </div>
+
+  <div class="mapwrap">
+    <div id="map"></div>
+    <div class="hint">
+      Tip: Tap markers for quick details. Map updates with filters and sorting.
+    </div>
+  </div>
 
   <div class="controls">
     <div class="box">
@@ -39,6 +71,7 @@
       <label><input id="fFenced" type="checkbox"> Fenced only</label>
       <label><input id="fWater" type="checkbox"> Water only</label>
       <label><input id="fFood" type="checkbox"> Food nearby</label>
+      <div class="hint">If “Water only” is on, only stops with water=Y show.</div>
     </div>
 
     <div class="box">
@@ -48,92 +81,160 @@
         <option value="name">Name</option>
         <option value="last_verified">Last Verified</option>
       </select>
-      <div class="small">Tip: “Closest to I-30” mimics the traveler use case.</div>
+      <div class="hint">Closest to I-30 is the “traveler mode” default.</div>
     </div>
   </div>
 
   <div id="list" class="list"></div>
 
 <script>
-  // ✅ EDIT THESE 3 STOPS
+  // ✅ EDIT THESE STOPS ONLY
+  // Keep keys exactly as shown: name, lat, lon, public, fenced, water, minutes_from_i30, food_nearby, notes, last_verified
   const stops = [
-  {
-    name: "Spring Lake Park Dog Park",
-    lat: 33.467088,
-    lon: -94.058168,
-    public: "Y",
-    fenced: "Y",
-    water: "Y",
-    minutes_from_i30: 2,
-    food_nearby: "Y",
-    notes: "Easy access from I-30, good parking.",
-    last_verified: "2026-02-21"
-  },
-  {
-    name: "Loves Travel US TXK",
-    lat: 33.4632734,
-    lon: -94.2043902,
-    public: "Y",
-    fenced: "Y",
-    water: "N",
-    minutes_from_i30: 2,
-    food_nearby: "Y",
-    notes: "Quick off Interstate.",
-    last_verified: "2026-02-21"
-  },
-  {
-    name: "Love's Travel Stop US 59",
-    lat: 33.2623001,
-    lon: -94.1522902,
-    public: "Y",
-    fenced: "Y",
-    water: "Unknown",
-    minutes_from_i30: 8,
-    food_nearby: "Y",
-    notes: "South off US 59",
-    last_verified: "2026-02-21"
-  }
-];
+    {
+      name: "Love's Travel Stop TXK",
+      lat: 33.4632734,
+      lon: -94.2043902,
+      public: "Y",
+      fenced: "Y",
+      water: "N",
+      minutes_from_i30: 2,
+      food_nearby: "Y",
+      notes: "Easy access from I-30, good parking.",
+      last_verified: "2026-02-21"
+    },
+    {
+      name: "Love's Travel Stop US 59",
+      lat: 33.2623001,
+      lon: -94.1522902,
+      public: "Y",
+      fenced: "Y",
+      water: "N",
+      minutes_from_i30: 9,
+      food_nearby: "Y",
+      notes: "Great fenced area.",
+      last_verified: "2026-02-21"
+    },
+    {
+      name: "Spring Lake Park",
+      lat: 33.467088,
+      lon: -94.058168,
+      public: "Y",
+      fenced: "Y",
+      water: "Unknown",
+      minutes_from_i30: 4,
+      food_nearby: "Y",
+      notes: "Quick off-highway stop.",
+      last_verified: "2026-02-21"
+    }
+  ];
 
+  // ----------------------------
+  // Helpers
+  // ----------------------------
   const el = (id) => document.getElementById(id);
 
   function appleMapsUrl(lat, lon, name) {
-    // Apple Maps directions
     const q = encodeURIComponent(name || "Dog Stop");
     return `https://maps.apple.com/?daddr=${lat},${lon}&q=${q}`;
   }
 
   function googleMapsUrl(lat, lon, name) {
-    // Google Maps directions
     const q = encodeURIComponent(name || "Dog Stop");
-    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&destination_place_id=&travelmode=driving&query=${q}`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving&query=${q}`;
+  }
+
+  function normYN(val) {
+    return (val || "").toString().trim().toUpperCase();
   }
 
   function passFilters(s) {
-    if (el("fPublic").checked && (s.public || "").toUpperCase() !== "Y") return false;
-    if (el("fFenced").checked && (s.fenced || "").toUpperCase() !== "Y") return false;
-    if (el("fWater").checked && (s.water || "").toUpperCase() !== "Y") return false;
-    if (el("fFood").checked && (s.food_nearby || "").toUpperCase() !== "Y") return false;
+    if (el("fPublic").checked && normYN(s.public) !== "Y") return false;
+    if (el("fFenced").checked && normYN(s.fenced) !== "Y") return false;
+    if (el("fWater").checked && normYN(s.water) !== "Y") return false;
+    if (el("fFood").checked && normYN(s.food_nearby) !== "Y") return false;
     return true;
   }
 
   function sortStops(arr) {
     const key = el("sort").value;
-    return [...arr].sort((a,b) => {
-      if (key === "name") return (a.name||"").localeCompare(b.name||"");
-      if (key === "last_verified") return (b.last_verified||"").localeCompare(a.last_verified||"");
-      // minutes_from_i30 numeric
-      return (a.minutes_from_i30 ?? 999) - (b.minutes_from_i30 ?? 999);
+    return [...arr].sort((a, b) => {
+      if (key === "name") return (a.name || "").localeCompare(b.name || "");
+      if (key === "last_verified") return (b.last_verified || "").localeCompare(a.last_verified || "");
+      return (Number(a.minutes_from_i30 ?? 999)) - (Number(b.minutes_from_i30 ?? 999));
     });
   }
 
+  // ----------------------------
+  // Map (Leaflet)
+  // ----------------------------
+  let map;
+  let markersLayer;
+
+  function initMap() {
+    // Default center: Texarkana
+    map = L.map("map").setView([33.4251, -94.0477], 12);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    markersLayer = L.layerGroup().addTo(map);
+  }
+
+  function updateMap(stopsToShow) {
+    if (!map) return;
+
+    markersLayer.clearLayers();
+
+    if (!stopsToShow.length) return;
+
+    const bounds = [];
+
+    for (const s of stopsToShow) {
+      const lat = Number(s.lat);
+      const lon = Number(s.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const marker = L.marker([lat, lon]).addTo(markersLayer);
+
+      const popupHtml = `
+        <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; line-height:1.35;">
+          <div style="font-weight:700; margin-bottom:6px;">${s.name || "Dog Stop"}</div>
+          <div style="font-size:12px; margin-bottom:8px;">
+            I-30: ${s.minutes_from_i30 ?? "?"} min • Water: ${s.water ?? "?"} • Food: ${s.food_nearby ?? "?"}
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="${appleMapsUrl(lat, lon, s.name)}" target="_blank" rel="noopener">Apple Maps</a>
+            <a href="${googleMapsUrl(lat, lon, s.name)}" target="_blank" rel="noopener">Google</a>
+          </div>
+          <div style="font-size:11px; color:#666; margin-top:8px;">Last verified: ${s.last_verified || "—"}</div>
+        </div>
+      `;
+      marker.bindPopup(popupHtml);
+
+      bounds.push([lat, lon]);
+    }
+
+    if (bounds.length) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }
+
+  // ----------------------------
+  // Render UI
+  // ----------------------------
   function render() {
     const filtered = sortStops(stops.filter(passFilters));
+
+    // Update list
     const container = el("list");
     container.innerHTML = "";
 
     if (!filtered.length) {
       container.innerHTML = `<div class="card">No matches. Try relaxing filters.</div>`;
+      updateMap(filtered);
       return;
     }
 
@@ -160,12 +261,17 @@
       `;
       container.appendChild(card);
     }
+
+    // Update map
+    updateMap(filtered);
   }
 
-  ["fPublic","fFenced","fWater","fFood","sort"].forEach(id => {
+  ["fPublic", "fFenced", "fWater", "fFood", "sort"].forEach(id => {
     el(id).addEventListener("change", render);
   });
 
+  // Boot
+  initMap();
   render();
 </script>
 </body>
